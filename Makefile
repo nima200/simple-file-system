@@ -6,7 +6,7 @@ LDFLAGS = `pkg-config fuse --cflags --libs`
 SOURCES= \
 disk_emu.c \
 sfs_api.c \
-sfs_test.c \
+fuse_wrappers.c \
 
 HEADERS= \
 sfs_api.h \

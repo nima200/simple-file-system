@@ -10,6 +10,7 @@
 typedef struct {
     directory_entry_t entries[INODE_COUNT - 1]; /* -1 because 1 inode is for root_dir */
     char free[INODE_COUNT - 1];
+    int currentIndex;
 } directory_t;
 
 void directory_init(directory_t *directory) {
@@ -18,6 +19,7 @@ void directory_init(directory_t *directory) {
         /* i + 1, since 0th dir entry's inode will be inode 1 and not 0 (inode 0 = root_dir) */
         directory_entry_setInodeIndex(&directory->entries[i], i + 1);
         directory->free[i] = 1;
+        directory->currentIndex = 0;
     }
 }
 
@@ -46,7 +48,7 @@ int directory_nextFree(directory_t *directory) {
     return -1;
 }
 
-int directory_contains_name(directory_t *directory, const char *name) {
+int directory_getInodeIndex(directory_t *directory, const char *name) {
     for (int i = 0; i < INODE_COUNT - 1; ++i) {
         if (strncmp(directory->entries[i].name, name, strlen(name)) == 0
             && directory->free[i] == 0) {
@@ -55,6 +57,17 @@ int directory_contains_name(directory_t *directory, const char *name) {
     }
     return -1;
 }
+
+int directory_getEntryIndex(directory_t* directory, const char *name) {
+    for (int i = 0; i < INODE_COUNT - 1; ++i) {
+        if (strncmp(directory->entries[i].name, name, strlen(name)) == 0
+                && directory->free[i] == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 
 
 #endif //ASSIGNMENT3_DIRECTORY_H

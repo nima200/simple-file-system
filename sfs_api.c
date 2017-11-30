@@ -15,6 +15,7 @@
 #include "typedefs/free_bitmap.h"
 #include "typedefs/file_descriptor.h"
 #include "typedefs/indirect_block.h"
+#include "typedefs/directory_entry.h"
 
 #define LASTNAME_FIRSTNAME_DISK "adibpour_nima_sfs_disk.disk"
 
@@ -80,18 +81,32 @@ void mksfs(int fresh) {
 }
 
 int sfs_getnextfilename(char *fname) {
-
+    for (int i = root_dir->currentIndex; i < INODE_COUNT - 1; ++i) {
+        if (directory_isUsed(root_dir, i)) {
+            int lengthToRead = (int)
+                    ((strlen(root_dir->entries[i].name) > MAX_FILE_NAME_LENGTH) ?
+                     MAX_FILE_NAME_LENGTH :
+                     strlen(root_dir->entries[i].name));
+            memcpy(fname, root_dir->entries[i].name, (size_t) lengthToRead);
+            root_dir->currentIndex++;
+            return 1;
+        }
+    }
+    root_dir->currentIndex = 0;
+    return 0;
 }
 
 int sfs_getfilesize(const char *path) {
-
+    int inodeIndex = directory_getInodeIndex(root_dir, path);
+    if (inodeIndex < 0) return -1;
+    return inode_table->nodes[inodeIndex].size;
 }
 
 int sfs_fopen(char *name) {
     if (strlen(name) > 20) {
         return -1;
     }
-    int inode_index = directory_contains_name(root_dir, name);
+    int inode_index = directory_getInodeIndex(root_dir, name);
     int fd_index;
     if (inode_index > 0) { /* File was already created */
         fd_index = fd_table_contains_inode(fd_table, inode_index);
@@ -296,7 +311,57 @@ int sfs_fseek(int fileID, int loc) {
 }
 
 int sfs_remove(char *file) {
-    // TODO clear the item from fd table, if it's there
-
+    int inodeIndex = directory_getInodeIndex(root_dir, file);
+    if (inodeIndex < 0) return -1; /* File doesn't exist */
+    free_bitmap_t freeBitmap;
+    read_from_disk(FREE_BITMAP_DATABLOCK_INDEX, BLOCK_SIZE, &freeBitmap);
+    inode_t* inode = &inode_table->nodes[inodeIndex];
+    /* Close the file descriptor too */
+    int fdIndex = fd_table_contains_inode(fd_table, inodeIndex);
+    sfs_fclose(fdIndex);
+    /* Remove data pointed to by data blocks pointers of the inode */
+    for (int i = 0; i < INODE_DATA_POINTER_COUNT; ++i) {
+        if (inode->data_pointrs[i] > -1) {
+            void* temp = malloc(BLOCK_SIZE);
+            memset(temp, 0, BLOCK_SIZE);
+            write_blocks(FILES_DATABLOCK_INDEX + inode->data_pointrs[i], 1, temp);
+            free(temp);
+            free_bitmap_setFree(&freeBitmap, inode->data_pointrs[i]);
+        }
+    }
+    /* Did the inode use an indirect block? */
+    if (inode->indirectPointer > -1) {
+        /* First we'll delete all the content pointed to by the indirect block */
+        indirect_block_t indirect_block;
+        read_from_disk(FILES_DATABLOCK_INDEX + inode->indirectPointer, BLOCK_SIZE, &indirect_block);
+        for (int i = 0; i < BLOCK_SIZE / sizeof(int); ++i) {
+            if (indirect_block.pointers[i] > -1) {
+                void* temp = malloc(BLOCK_SIZE);
+                memset(temp, 0, BLOCK_SIZE);
+                write_blocks(FILES_DATABLOCK_INDEX + indirect_block.pointers[i], 1, temp);
+                free(temp);
+                free_bitmap_setFree(&freeBitmap, indirect_block.pointers[i]);
+            }
+        }
+        /* Then we delete the indirect block itself too */
+        void* temp = malloc(BLOCK_SIZE);
+        memset(temp, 0, BLOCK_SIZE);
+        write_blocks(FILES_DATABLOCK_INDEX + inode->indirectPointer, 1, temp);
+        free(temp);
+        free_bitmap_setFree(&freeBitmap, inode->indirectPointer);
+    }
+    /* Reinitialize that inode to blank */
+    inode_init(inode);
+    inode_table_setFree(inode_table, inodeIndex);
+    /* Find which entry in the directory that file was and reset it */
+    int dirIndex = directory_getEntryIndex(root_dir, file);
+    /* Reinitialize that directory entry to blank */
+    directory_entry_init(&root_dir->entries[dirIndex]);
+    directory_setFree(root_dir, dirIndex);
+    /* Save the things we updated here on to the disk */
+    write_blocks(INODETABLE_DATABLOCK_INDEX, (int) byteToBlock(sizeof(inode_table_t)), inode_table);
+    write_blocks(FREE_BITMAP_DATABLOCK_INDEX, (int) byteToBlock(sizeof(free_bitmap_t)), &freeBitmap);
+    write_blocks(ROOT_DIR_DATABLOCK_INDEX, (int) byteToBlock(sizeof(directory_t)), root_dir);
+    return 0;
 }
 

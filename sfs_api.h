@@ -2,6 +2,7 @@
 #define _INCLUDE_SFS_API_H_
 
 #include <stdint.h>
+#define MAXFILENAME 20
 
 void mksfs(int fresh);
 int sfs_getnextfilename(char *fname);
