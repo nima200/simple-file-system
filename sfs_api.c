@@ -5,6 +5,7 @@
 #include <string.h>
 #include <fuse.h>
 #include <strings.h>
+#include <signal.h>
 #include "disk_emu.h"
 #include "typedefs/inode_table.h"
 #include "typedefs/directory.h"
@@ -23,10 +24,15 @@ inode_table_t *inode_table = NULL;
 directory_t *root_dir = NULL;
 file_descriptor_table_t *fd_table = NULL;
 
+void FREE_AND_EXIT();
+
 void mksfs(int fresh) {
     if (!inode_table) inode_table = malloc(sizeof(inode_table_t));
     if (!root_dir) root_dir = malloc(sizeof(directory_t));
     if (!fd_table) fd_table = malloc(sizeof(file_descriptor_table_t));
+    signal(SIGINT, (__sighandler_t) FREE_AND_EXIT);
+    signal(SIGSTOP, (__sighandler_t) FREE_AND_EXIT);
+    signal(SIGTSTP, (__sighandler_t) FREE_AND_EXIT);
     memset(inode_table, 0, sizeof(inode_table_t));
     memset(root_dir, 0, sizeof(directory_t));
     memset(fd_table, 0, sizeof(file_descriptor_table_t));
@@ -363,5 +369,12 @@ int sfs_remove(char *file) {
     write_blocks(FREE_BITMAP_DATABLOCK_INDEX, (int) byteToBlock(sizeof(free_bitmap_t)), &freeBitmap);
     write_blocks(ROOT_DIR_DATABLOCK_INDEX, (int) byteToBlock(sizeof(directory_t)), root_dir);
     return 0;
+}
+
+void FREE_AND_EXIT() {
+    free(inode_table);
+    free(root_dir);
+    free(fd_table);
+    exit(0);
 }
 
