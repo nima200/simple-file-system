@@ -30,12 +30,15 @@ void mksfs(int fresh) {
     if (!inode_table) inode_table = malloc(sizeof(inode_table_t));
     if (!root_dir) root_dir = malloc(sizeof(directory_t));
     if (!fd_table) fd_table = malloc(sizeof(file_descriptor_table_t));
+    /* Set up the sig handlers */
     signal(SIGINT, (__sighandler_t) FREE_AND_EXIT);
     signal(SIGSTOP, (__sighandler_t) FREE_AND_EXIT);
     signal(SIGTSTP, (__sighandler_t) FREE_AND_EXIT);
+    /* Clear all in-memory data structures */
     memset(inode_table, 0, sizeof(inode_table_t));
     memset(root_dir, 0, sizeof(directory_t));
     memset(fd_table, 0, sizeof(file_descriptor_table_t));
+    /* Initialize all in-memory data structures */
     inode_table_init(inode_table);
     directory_init(root_dir);
     fd_table_init(fd_table);
@@ -44,13 +47,15 @@ void mksfs(int fresh) {
             remove(LASTNAME_FIRSTNAME_DISK);
             init_fresh_disk(LASTNAME_FIRSTNAME_DISK, BLOCK_SIZE, BLOCK_COUNT);
 
+            /* Setup the super block */
             super_block_t super_block;
             super_block_init(&super_block);
-            super_block.magic = 0xACBD0005;
+            super_block.magic = 0xACBD0005; /* Arbitrary */
             super_block.block_size = BLOCK_SIZE;
             super_block.fs_size = BLOCK_COUNT;
             super_block.inode_table_length = (int) byteToBlock(sizeof(inode_table_t));
             super_block.root_dir_inode_index = 0;
+
 
             inode_table_setUsed(inode_table, 0); /* for root_dir */
             inode_t *root_dir_inode = &inode_table->nodes[0];
@@ -64,6 +69,7 @@ void mksfs(int fresh) {
 
             directory_init(root_dir);
 
+            /* Write everything to the disk */
             write_blocks(SUPERBLOCK_DATABLOCK_INDEX, 1, &super_block);
             write_blocks(INODETABLE_DATABLOCK_INDEX, 8, inode_table);
             write_blocks(FREE_BITMAP_DATABLOCK_INDEX, 1, &free_bitmap);
@@ -73,12 +79,10 @@ void mksfs(int fresh) {
         }
         case 0: {
             init_disk(LASTNAME_FIRSTNAME_DISK, BLOCK_SIZE, BLOCK_COUNT);
-
             super_block_t super_block;
             read_from_disk(SUPERBLOCK_DATABLOCK_INDEX, BLOCK_SIZE, &super_block);
             read_from_disk(INODETABLE_DATABLOCK_INDEX, sizeof(inode_table_t), inode_table);
             read_from_disk(ROOT_DIR_DATABLOCK_INDEX, sizeof(directory_t), root_dir);
-
             break;
         }
         default:
@@ -87,14 +91,15 @@ void mksfs(int fresh) {
 }
 
 int sfs_getnextfilename(char *fname) {
+    /* Crawl all entries of the root dir */
     for (int i = root_dir->currentIndex; i < INODE_COUNT - 1; ++i) {
-        if (directory_isUsed(root_dir, i)) {
+        if (directory_isUsed(root_dir, i)) { /* Ignore the free entries */
             int lengthToRead = (int)
                     ((strlen(root_dir->entries[i].name) > MAX_FILE_NAME_LENGTH) ?
                      MAX_FILE_NAME_LENGTH :
                      strlen(root_dir->entries[i].name));
-            memcpy(fname, root_dir->entries[i].name, (size_t) lengthToRead);
-            root_dir->currentIndex++;
+            memcpy(fname, root_dir->entries[i].name, (size_t) lengthToRead); /* Copy the name of the file onto parameter */
+            root_dir->currentIndex++; /* Increment the current index to know where we were on the next try */
             return 1;
         }
     }

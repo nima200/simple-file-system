@@ -8,6 +8,8 @@
 #include "../constants.h"
 
 /**
+ * @brief I-Node data structure that holds all meta-data information for a file or directory, as well as pointers to the
+ * data-blocks that contain the actual contents of the file
  * @size 72 bytes: 6*4 + 12*4
  * */
 typedef struct {
@@ -20,6 +22,10 @@ typedef struct {
     int indirectPointer;
 } inode_t;
 
+/**
+ * @brief Initializes an I-Node
+ * @param inode Pointer to I-Node
+ */
 void inode_init(inode_t *inode) {
     inode->mode = 0;
     inode->link_count = 1;
